@@ -1,18 +1,16 @@
 // api/ai.js
-// Nightbot AI dengan chat memory sederhana (in-memory)
-
-let chatHistories = {}; // { username: [ {role, content}, ... ] }
-
+// Vercel serverless function (Node.js). Returns plain text for Nightbot's $(urlfetch).
 export default async function handler(req, res) {
   try {
+    // Accept prompt via query param `prompt` (use Nightbot $(querystring))
     const prompt = (req.query.prompt || "").trim();
-    const username = (req.query.user || "anon").toLowerCase();
 
     if (!prompt) {
+      // Nightbot will display this if user calls !ai tanpa argumen
       return res
         .status(200)
         .setHeader("Content-Type", "text/plain; charset=utf-8")
-        .send("Cara pakai: !ai <pertanyaan>. Contoh: !ai apa itu LLM?");
+        .send("Usage: !ai <pertanyaan>. Contoh: !ai apa itu LLM?");
     }
 
     const API_KEY = process.env.GROQ_API_KEY;
@@ -23,29 +21,15 @@ export default async function handler(req, res) {
         .send("Server error: API key belum diatur di environment.");
     }
 
-    // Ambil history user kalau ada
-    if (!chatHistories[username]) chatHistories[username] = [];
-
-    // Tambah pertanyaan user ke history
-    chatHistories[username].push({ role: "user", content: prompt });
-
-    // Batasin panjang history (misal 5 pesan terakhir)
-    if (chatHistories[username].length > 10) {
-      chatHistories[username] = chatHistories[username].slice(-10);
-    }
-
+    // Construct request to Groq OpenAI-compatible endpoint
     const payload = {
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       messages: [
-        {
-          role: "system",
-          content:
-            "Kamu adalah chatbot ramah di live chat YouTube. Ingat obrolan sebelumnya dengan user. Jawab singkat, jelas, santai, dan kayak manusia ngobrol. Jangan kaku, boleh pakai emoji seperlunya."
-        },
-        ...chatHistories[username] // sisipkan riwayat percakapan
+        { role: "user", content: prompt }
       ],
-      max_tokens: 250,
-      temperature: 0.7
+      // optional: batasi token agar respons tidak terlalu panjang
+      max_tokens: 300,
+      temperature: 0.2
     };
 
     const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -54,11 +38,12 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${API_KEY}`
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      // timeout not supported on fetch by default; rely on platform
     });
 
     if (!resp.ok) {
-      const text = await resp.text().catch(() => "<no body>");
+      const text = await resp.text().catch(()=>"<no body>");
       console.error("Groq API error:", resp.status, text);
       return res
         .status(502)
@@ -66,24 +51,26 @@ export default async function handler(req, res) {
         .send("AI provider error (lihat console).");
     }
 
-    const data = await resp.json().catch(() => null);
+    const data = await resp.json().catch(()=>null);
+    // Try to extract assistant message
     let answer = "";
 
-    if (data?.choices?.[0]?.message?.content) {
-      answer = data.choices[0].message.content.trim();
-    } else if (data?.choices?.[0]?.text) {
+    if (data && data.choices && data.choices.length > 0) {
+      // OpenAI-compatible: choices[0].message.content
+      const m = data.choices[0].message;
+      if (m && typeof m.content === "string") answer = m.content.trim();
+    }
+
+    // Fallbacks
+    if (!answer && data && data.choices && data.choices[0] && data.choices[0].text) {
       answer = data.choices[0].text.trim();
     }
-
     if (!answer) {
-      answer = "Hmm... aku agak bingung jawabnya 😅";
+      answer = "Maaf, tidak mendapatkan jawaban dari model.";
     }
 
-    // Simpan jawaban AI ke history
-    chatHistories[username].push({ role: "assistant", content: answer });
-
-    // Biar ga kepanjangan di chat
-    const MAX_LENGTH = 400;
+    // Limit length — Nightbot has message length limits; trim safely
+    const MAX_LENGTH = 450; // cukup agar pas di chat
     if (answer.length > MAX_LENGTH) {
       answer = answer.slice(0, MAX_LENGTH - 3).trim() + "...";
     }

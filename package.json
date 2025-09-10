@@ -1,0 +1,11 @@
+{
+  "name": "nightbot-ai",
+  "version": "1.0.0",
+  "description": "Endpoint for Nightbot to fetch AI answers (Groq)",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

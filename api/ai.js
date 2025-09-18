@@ -12,7 +12,7 @@ export default async function handler(req, res) {
       return res
         .status(200)
         .setHeader("Content-Type", "text/plain; charset=utf-8")
-        .send("Cara pakai: !ai <pertanyaan>. Contoh: !ai apa itu LLM?");
+        .send("apa sayang?");
     }
 
     const API_KEY = process.env.GROQ_API_KEY;

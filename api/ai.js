@@ -40,7 +40,7 @@ export default async function handler(req, res) {
         {
           role: "system",
           content:
-            "Kamu adalah chatbot ramah di live chat YouTube. Ingat obrolan sebelumnya dengan user. Jawab singkat, jelas, santai, dan kayak manusia ngobrol. Jangan kaku, boleh pakai emoji seperlunya, jawab maksimal 2 kalimat"
+            "Kamu adalah chatbot ramah di live chat YouTube. Ingat obrolan sebelumnya dengan user. Jawab super singkat, jelas, santai, kayak manusia ngobrol. Maksimal 2 kalimat dan <200 karakter."
         },
         ...chatHistories[username]
       ],
@@ -82,16 +82,19 @@ export default async function handler(req, res) {
     // Simpan jawaban AI ke history
     chatHistories[username].push({ role: "assistant", content: answer });
 
-    // Potong jawaban kalau terlalu panjang (Nightbot limit ±400-500 char)
-    const MAX_LENGTH = 400;
-    if (answer.length > MAX_LENGTH) {
-      answer = answer.slice(0, MAX_LENGTH - 3).trim() + "...";
-    }
+    // Split jawaban jadi beberapa bagian (max 190 char biar aman)
+    const MAX_LENGTH = 190;
+    const chunks = answer.match(new RegExp(`.{1,${MAX_LENGTH}}(\\s|$)`, "g")) || [answer];
+
+    // Gabungkan chunks dengan separator supaya Nightbot kirim semua
+    // Catatan: Nightbot biasanya cuma bisa balikin 1 pesan per request,
+    // jadi kita pakai newline biar kelihatan terpisah di live chat.
+    const finalAnswer = chunks.join("\n");
 
     res
       .status(200)
       .setHeader("Content-Type", "text/plain; charset=utf-8")
-      .send(answer);
+      .send(finalAnswer);
 
   } catch (err) {
     console.error("Handler error:", err);
@@ -100,4 +103,5 @@ export default async function handler(req, res) {
       .setHeader("Content-Type", "text/plain; charset=utf-8")
       .send("⚠️ Internal server error. Cek logs di Vercel.");
   }
-}
+          }
+      

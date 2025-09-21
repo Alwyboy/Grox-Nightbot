@@ -40,8 +40,7 @@ export default async function handler(req, res) {
         {
           role: "system",
           content:
-            "Kamu adalah chatbot ramah di live chat YouTube. Ingat obrolan sebelumnya dengan user. Jawab singkat, jelas, santai, dan kayak manusia ngobrol.
-             Jangan kaku, boleh pakai emoji seperlunya, jawab maksimal 3 kalimat"
+            "Kamu adalah chatbot ramah di live chat YouTube. Ingat obrolan sebelumnya dengan user. Jawab singkat, jelas, santai, dan kayak manusia ngobrol. Jangan kaku, boleh pakai emoji seperlunya, jawab maksimal 3 kalimat"
         },
         ...chatHistories[username]
       ],

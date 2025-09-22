@@ -50,7 +50,7 @@ export default async function handler(req, res) {
         return res
           .status(200)
           .setHeader("Content-Type", "text/plain; charset=utf-8")
-          .send(`#${absenCounter} hadir ✋`);
+          .send(`kamu ${usernamaRaw} absen ke #${absenCounter} cuy`);
       } else if (absenList[username]) {
         return res
           .status(200)

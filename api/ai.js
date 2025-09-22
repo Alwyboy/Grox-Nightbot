@@ -1,15 +1,12 @@
-// api/ai.js
-// Nightbot AI + absen system
-
-let chatHistories = {}; // memory sementara
-let attendance = {};    // simpan daftar absen
+let chatHistories = {}; 
+let attendance = {};
 let attendanceCounter = 1;
-let firstMessage = true;
+let currentDay = new Date().toDateString();
 
 function resetAttendance() {
   attendance = {};
   attendanceCounter = 1;
-  firstMessage = false;
+  currentDay = new Date().toDateString();
 }
 
 export default async function handler(req, res) {
@@ -19,11 +16,13 @@ export default async function handler(req, res) {
     const username = String(usernameRaw).toLowerCase();
     const userlevel = (req.query.userlevel || "").toLowerCase();
 
-    // Reset otomatis saat live baru
-    if (firstMessage) resetAttendance();
+    // Reset otomatis kalau ganti hari
+    if (new Date().toDateString() !== currentDay) {
+      resetAttendance();
+    }
 
     // === HANDLE ABSEN ===
-    if (prompt === "absen") {
+    if (prompt === "!absen") {
       if (!attendance[username]) {
         if (attendanceCounter > 100) {
           return res
@@ -40,8 +39,8 @@ export default async function handler(req, res) {
         .send(`kamu ${usernameRaw} absen ke ${nomor}`);
     }
 
-    // === HANDLE RESET ABSEN (khusus moderator/owner) ===
-    if (prompt === "resetabsen") {
+    // === HANDLE RESET ABSEN ===
+    if (prompt === "!resetabsen") {
       if (userlevel === "moderator" || userlevel === "owner") {
         resetAttendance();
         return res
@@ -53,7 +52,6 @@ export default async function handler(req, res) {
           .status(200)
           .setHeader("Content-Type", "text/plain; charset=utf-8")
           .send("⚠️ Hanya moderator/owner yang bisa reset absen.");
-      }
     }
 
     // === HANDLE AI ===

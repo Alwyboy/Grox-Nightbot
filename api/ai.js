@@ -1,39 +1,53 @@
 // api/ai.js
-// Nightbot AI dengan chat memory sederhana (in-memory, versi aman) + absen reset tiap live stream
+// Nightbot AI + absen system
 
-let chatHistories = {};  // simpan history chat user
-let absenList = {};      // mapping user -> nomor absen
-let absenCounter = 0;    // hitung absen global
+let chatHistories = {}; // memory sementara
+let attendance = {};    // simpan daftar absen
+let attendanceCounter = 1;
+let firstMessage = true;
 
-// ====== Fungsi reset absen ======
-function resetAbsen() {
-  absenList = {};
-  absenCounter = 0;
-  console.log("✅ Absen direset (stream baru dimulai)");
+function resetAttendance() {
+  attendance = {};
+  attendanceCounter = 1;
+  firstMessage = false;
 }
 
 export default async function handler(req, res) {
   try {
     const prompt = (req.query.prompt || "").trim();
-    const username = (req.query.user ? String(req.query.user).toLowerCase() : "anon");
-    const userLevel = (req.query.userlevel || "").toLowerCase(); 
-    // Nightbot biasanya kasih userlevel: owner, moderator, regular, subscriber, everyone
+    const usernameRaw = req.query.user || "anon";
+    const username = String(usernameRaw).toLowerCase();
+    const userlevel = (req.query.userlevel || "").toLowerCase();
 
-    if (!prompt) {
+    // Reset otomatis saat live baru
+    if (firstMessage) resetAttendance();
+
+    // === HANDLE ABSEN ===
+    if (prompt === "absen") {
+      if (!attendance[username]) {
+        if (attendanceCounter > 100) {
+          return res
+            .status(200)
+            .setHeader("Content-Type", "text/plain; charset=utf-8")
+            .send(`⚠️ Absen sudah penuh (1-100).`);
+        }
+        attendance[username] = attendanceCounter++;
+      }
+      const nomor = attendance[username];
       return res
         .status(200)
         .setHeader("Content-Type", "text/plain; charset=utf-8")
-        .send("apa sayang?");
+        .send(`kamu ${usernameRaw} absen ke ${nomor}`);
     }
 
-    // ====== Command Reset Absen (hanya moderator/owner) ======
-    if (prompt.toLowerCase() === "resetabsen") {
-      if (userLevel === "moderator" || userLevel === "owner") {
-        resetAbsen();
+    // === HANDLE RESET ABSEN (khusus moderator/owner) ===
+    if (prompt === "resetabsen") {
+      if (userlevel === "moderator" || userlevel === "owner") {
+        resetAttendance();
         return res
           .status(200)
           .setHeader("Content-Type", "text/plain; charset=utf-8")
-          .send("📢 Absen sudah direset, silakan mulai daftar dari #1 ✨");
+          .send("📋 Daftar absen sudah direset!");
       } else {
         return res
           .status(200)
@@ -42,29 +56,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // ====== Command Absen ======
-    if (prompt.toLowerCase() === "absen") {
-      if (!absenList[username] && absenCounter < 100) {
-        absenCounter++;
-        absenList[username] = absenCounter;
-        return res
-          .status(200)
-          .setHeader("Content-Type", "text/plain; charset=utf-8")
-          .send(`kamu ${usernameRaw} absen ke #${absenCounter} cuy`);
-      } else if (absenList[username]) {
-        return res
-          .status(200)
-          .setHeader("Content-Type", "text/plain; charset=utf-8")
-          .send(`Kamu sudah absen di nomor #${absenList[username]} 😉`);
-      } else {
-        return res
-          .status(200)
-          .setHeader("Content-Type", "text/plain; charset=utf-8")
-          .send("⚠️ Absen sudah penuh sampai #100");
-      }
+    // === HANDLE AI ===
+    if (!prompt) {
+      return res
+        .status(200)
+        .setHeader("Content-Type", "text/plain; charset=utf-8")
+        .send("apa sayang?");
     }
 
-    // ====== MODE AI NORMAL ======
     const API_KEY = process.env.GROQ_API_KEY;
     if (!API_KEY) {
       return res
@@ -73,10 +72,13 @@ export default async function handler(req, res) {
         .send("⚠️ API key belum diatur. Cek environment di Vercel.");
     }
 
+    // Inisialisasi history user kalau belum ada
     if (!chatHistories[username]) chatHistories[username] = [];
 
+    // Tambahkan pertanyaan user ke history
     chatHistories[username].push({ role: "user", content: prompt });
 
+    // Batasin riwayat agar nggak terlalu panjang
     if (chatHistories[username].length > 10) {
       chatHistories[username] = chatHistories[username].slice(-10);
     }
@@ -87,7 +89,7 @@ export default async function handler(req, res) {
         {
           role: "system",
           content:
-            "Kamu adalah chatbot humoris di live chat YouTube. Ingat obrolan sebelumnya dengan user. Jawab super singkat, jelas, santai, kayak manusia ngobrol. Maksimal 2 kalimat dan <200 karakter."
+            "Kamu adalah chatbot humoris dan ramah di live chat YouTube. Ingat obrolan sebelumnya dengan user. Jawab super singkat, <200 karakter, kayak manusia ngobrol santai. Jangan kaku, boleh pakai emoji."
         },
         ...chatHistories[username]
       ],
@@ -126,16 +128,19 @@ export default async function handler(req, res) {
       answer = "Hmm... aku agak bingung jawabnya 😅";
     }
 
+    // Simpan jawaban AI ke history
     chatHistories[username].push({ role: "assistant", content: answer });
 
-    const MAX_LENGTH = 190;
-    const chunks = answer.match(new RegExp(`.{1,${MAX_LENGTH}}(\\s|$)`, "g")) || [answer];
-    const finalAnswer = chunks.join("\n");
+    // Potong jawaban kalau terlalu panjang (YouTube chat limit ±200 char)
+    const MAX_LENGTH = 200;
+    if (answer.length > MAX_LENGTH) {
+      answer = answer.slice(0, MAX_LENGTH - 3).trim() + "...";
+    }
 
     res
       .status(200)
       .setHeader("Content-Type", "text/plain; charset=utf-8")
-      .send(finalAnswer);
+      .send(answer);
 
   } catch (err) {
     console.error("Handler error:", err);

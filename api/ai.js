@@ -1,12 +1,23 @@
 // api/ai.js
-// Nightbot AI dengan chat memory sederhana (in-memory, versi aman)
+// Nightbot AI dengan chat memory sederhana (in-memory, versi aman) + absen reset tiap live stream
 
-let chatHistories = {}; // simpan history di memory sementara
+let chatHistories = {};  // simpan history chat user
+let absenList = {};      // mapping user -> nomor absen
+let absenCounter = 0;    // hitung absen global
+
+// ====== Fungsi reset absen ======
+function resetAbsen() {
+  absenList = {};
+  absenCounter = 0;
+  console.log("✅ Absen direset (stream baru dimulai)");
+}
 
 export default async function handler(req, res) {
   try {
     const prompt = (req.query.prompt || "").trim();
     const username = (req.query.user ? String(req.query.user).toLowerCase() : "anon");
+    const userLevel = (req.query.userlevel || "").toLowerCase(); 
+    // Nightbot biasanya kasih userlevel: owner, moderator, regular, subscriber, everyone
 
     if (!prompt) {
       return res
@@ -15,6 +26,45 @@ export default async function handler(req, res) {
         .send("apa sayang?");
     }
 
+    // ====== Command Reset Absen (hanya moderator/owner) ======
+    if (prompt.toLowerCase() === "resetabsen") {
+      if (userLevel === "moderator" || userLevel === "owner") {
+        resetAbsen();
+        return res
+          .status(200)
+          .setHeader("Content-Type", "text/plain; charset=utf-8")
+          .send("📢 Absen sudah direset, silakan mulai daftar dari #1 ✨");
+      } else {
+        return res
+          .status(200)
+          .setHeader("Content-Type", "text/plain; charset=utf-8")
+          .send("⚠️ Hanya moderator/owner yang bisa reset absen.");
+      }
+    }
+
+    // ====== Command Absen ======
+    if (prompt.toLowerCase() === "absen") {
+      if (!absenList[username] && absenCounter < 100) {
+        absenCounter++;
+        absenList[username] = absenCounter;
+        return res
+          .status(200)
+          .setHeader("Content-Type", "text/plain; charset=utf-8")
+          .send(`#${absenCounter} hadir ✋`);
+      } else if (absenList[username]) {
+        return res
+          .status(200)
+          .setHeader("Content-Type", "text/plain; charset=utf-8")
+          .send(`Kamu sudah absen di nomor #${absenList[username]} 😉`);
+      } else {
+        return res
+          .status(200)
+          .setHeader("Content-Type", "text/plain; charset=utf-8")
+          .send("⚠️ Absen sudah penuh sampai #100");
+      }
+    }
+
+    // ====== MODE AI NORMAL ======
     const API_KEY = process.env.GROQ_API_KEY;
     if (!API_KEY) {
       return res
@@ -23,13 +73,10 @@ export default async function handler(req, res) {
         .send("⚠️ API key belum diatur. Cek environment di Vercel.");
     }
 
-    // Inisialisasi history user kalau belum ada
     if (!chatHistories[username]) chatHistories[username] = [];
 
-    // Tambahkan pertanyaan user ke history
     chatHistories[username].push({ role: "user", content: prompt });
 
-    // Batasin riwayat agar nggak terlalu panjang
     if (chatHistories[username].length > 10) {
       chatHistories[username] = chatHistories[username].slice(-10);
     }
@@ -79,16 +126,10 @@ export default async function handler(req, res) {
       answer = "Hmm... aku agak bingung jawabnya 😅";
     }
 
-    // Simpan jawaban AI ke history
     chatHistories[username].push({ role: "assistant", content: answer });
 
-    // Split jawaban jadi beberapa bagian (max 190 char biar aman)
     const MAX_LENGTH = 190;
     const chunks = answer.match(new RegExp(`.{1,${MAX_LENGTH}}(\\s|$)`, "g")) || [answer];
-
-    // Gabungkan chunks dengan separator supaya Nightbot kirim semua
-    // Catatan: Nightbot biasanya cuma bisa balikin 1 pesan per request,
-    // jadi kita pakai newline biar kelihatan terpisah di live chat.
     const finalAnswer = chunks.join("\n");
 
     res
@@ -103,5 +144,4 @@ export default async function handler(req, res) {
       .setHeader("Content-Type", "text/plain; charset=utf-8")
       .send("⚠️ Internal server error. Cek logs di Vercel.");
   }
-          }
-      
+}

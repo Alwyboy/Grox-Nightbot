@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     }
 
     // === HANDLE ABSEN ===
-    if (prompt === "!absen") {
+    if (prompt === "absen") {
       if (!attendance[username]) {
         if (attendanceCounter > 100) {
           return res
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     }
 
     // === HANDLE RESET ABSEN ===
-    if (prompt === "!resetabsen") {
+    if (prompt === "resetabsen") {
       if (userlevel === "moderator" || userlevel === "owner") {
         resetAttendance();
         return res
@@ -52,8 +52,9 @@ export default async function handler(req, res) {
           .status(200)
           .setHeader("Content-Type", "text/plain; charset=utf-8")
           .send("⚠️ Hanya moderator/owner yang bisa reset absen.");
+      }
     }
-
+    
     // === HANDLE AI ===
     if (!prompt) {
       return res

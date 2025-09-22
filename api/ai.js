@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     }
 
     // ====== Command Reset Absen (hanya moderator/owner) ======
-    if (prompt.toLowerCase() === "!resetabsen") {
+    if (prompt.toLowerCase() === "resetabsen") {
       if (userLevel === "moderator" || userLevel === "owner") {
         resetAbsen();
         return res
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     }
 
     // ====== Command Absen ======
-    if (prompt.toLowerCase() === "!absen") {
+    if (prompt.toLowerCase() === "absen") {
       if (!absenList[username] && absenCounter < 100) {
         absenCounter++;
         absenList[username] = absenCounter;
